@@ -158,16 +158,12 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
     // AUIPC
     } else if (opcode == 0b0010111) {
         snprintf(result, buf_size, "auipc x%d, %d", rd, imm_3112);
-    } else {
-        snprintf(result, buf_size, "unknown U-type");
     }
-
+    
     // check for J-type
     //JAL
     else if (opcode == 0b1101111) {
         snprintf(result, buf_size, "jal x%d, %d", rd, imm_3112);
-    } else {
-        snprintf(result, buf_size, "unknown J-type");
     }
 
     //check for B-type
