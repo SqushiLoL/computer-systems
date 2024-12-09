@@ -405,20 +405,27 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
       }
       program_count += 4;
 
-      // ??? - type
-      // ecall
+      // system calls
     } else if (opcode == 0b1110011 && funct3 == 0b000 &&
                funct12 == 0b000000000000) {
-      if (rd == 0) {
-        // ecall
-        if (registers[17] == 10) { // a7 = 10 is the exit call
-          break;
-        }
+
+      // System call 1: Return getchar() in A0
+      if (registers[17] == 1) {
+        int input_char = getchar();
+        registers[10]  = input_char;
+
+        // System call 2: Perform putchar(c), where c is in A0
+      } else if (registers[17] == 2) {
+        putchar((char)registers[10]);
+        fflush(stdout); // Ensure immediate output
+
+        // System call 3 or 93: Exit the simulation
+      } else if (registers[17] == 3 || registers[17] == 93) {
+        break;
       } else {
-        fprintf(stderr, "unknown\n");
+        fprintf(stderr, "Unknown system call: %u\n", registers[17]);
       }
-    } else {
-      fprintf(stderr, "unknown\n");
+      program_count += 4;
     }
   }
   return (struct Stat){.insns = 0};
