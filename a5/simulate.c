@@ -13,6 +13,7 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
   uint32_t registers[32] = {0};        // registers
   uint32_t program_count = start_addr; // Start simulation from entry point
   uint32_t instruction;
+  uint32_t insns = 0;
 
   while (1) {
     // Fetch instruction
@@ -162,58 +163,13 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
           fprintf(stderr,
                   "unknown R-type: (opcode=0xx%d, funct3=%d, funct7=%d)\n",
                   opcode, funct3, funct7);
-        }
-      } else {
-        fprintf(stderr, "unknown extension R-type\n");
-      }
-    } else if (opcode == 0b1100011) {
-      sign_extend32(imm_40, 12);
-      if (funct3 == 0b000) {
-        // BEQ
-        if (registers[rs1] == registers[rs2]) {
-          program_count += imm_40; // Branch to the target address
-        } else {
-          program_count += 4; // Move to the next instruction
-        }
-      } else if (funct3 == 0b001) {
-        // BNE
-        if (registers[rs1] != registers[rs2]) {
-          program_count += imm_40; // Branch to the target address
-        } else {
-          program_count += 4; // Move to the next instruction
-        }
-      } else if (funct3 == 0b100) {
-        // BLT
-        if (registers[rs1] < registers[rs2]) {
-          program_count += imm_40; // Branch to the target address
-        } else {
-          program_count += 4; // Move to the next instruction
-        }
-      } else if (funct3 == 0b101) {
-        // BGE
-        if (registers[rs1] >= registers[rs2]) {
-          program_count += imm_40; // Branch to the target address
-        } else {
-          program_count += 4; // Move to the next instruction
-        }
-      } else if (funct3 == 0b110) {
-        // BLTU
-        if ((uint32_t)registers[rs1] < (uint32_t)registers[rs2]) {
-          program_count += imm_40; // Branch to the target address
-        } else {
-          program_count += 4; // Move to the next instruction
-        }
-      } else if (funct3 == 0b111) {
-        if ((int32_t)registers[rs1] >= (int32_t)registers[rs2]) {
-          program_count += imm_40;
-        } else {
           program_count += 4;
         }
-
-        // BGEU
       } else {
         fprintf(stderr, "unknown extension R-type\n");
       }
+      program_count += 4;
+      insns++;
     }
 
     // check for I-type
@@ -225,107 +181,110 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         registers[rd] = program_count + 4; // Store return address
       }
       program_count = target; // Jump to target
-      continue;               // Skip PC increment at the end of the loop
-    } else if (opcode == 0b0000011) {
+      insns++;
+      continue; // Skip PC increment at the end of the loop
+
+    } else if (opcode == 0b0000011) { // I-Type Load instructions
       uint32_t address = registers[rs1] + imm_110;
-      // LB
+
+      // LB: Load Byte
       if (funct3 == 0b000) {
         registers[rd] = (int8_t)memory_rd_b(mem, address);
-
-        // LH
-      } else if (funct3 == 0b001) {
-        registers[rd] = (int16_t)memory_rd_h(mem, address);
-
-        // LW
-      } else if (funct3 == 0b010) {
-        registers[rd] = memory_rd_w(mem, address);
-
-        // LBU
-      } else if (funct3 == 0b100) {
-        registers[rd] = (uint8_t)memory_rd_b(mem, address);
-
-        // LHU
-      } else if (funct3 == 0b101) {
-        registers[rd] = (uint16_t)memory_rd_h(mem, address);
-
-      } else {
-        fprintf(stderr, "unknown I-type\n");
       }
-    } else if (opcode == 0b0010011) {
+      // LH: Load Halfword
+      else if (funct3 == 0b001) {
+        registers[rd] = (int16_t)memory_rd_h(mem, address);
+      }
+      // LW: Load Word
+      else if (funct3 == 0b010) {
+        registers[rd] = memory_rd_w(mem, address);
+      }
+      // LBU: Load Byte Unsigned
+      else if (funct3 == 0b100) {
+        registers[rd] = (uint8_t)memory_rd_b(mem, address);
+      }
+      // LHU: Load Halfword Unsigned
+      else if (funct3 == 0b101) {
+        registers[rd] = (uint16_t)memory_rd_h(mem, address);
+      } else {
+        fprintf(stderr,
+                "ERROR: Unknown I-Type Load instruction (funct3=0x%x)\n",
+                funct3);
+      }
+
+      // Increment program_count to move to the next instruction
+      program_count += 4;
+      insns++;
+    }
+
+    else if (opcode == 0b0010011) { // I-Type instructions
       // ADDI
       if (funct3 == 0b000) {
         registers[rd] = registers[rs1] + imm_110;
-
-        // SLTI
-      } else if (funct3 == 0b010) {
-        if ((int32_t)registers[rs1] < imm_110) {
-          registers[rd] = 1;
-        } else {
-          registers[rd] = 0;
-        }
-        // SLTIU
-      } else if (funct3 == 0b011) {
-        if ((uint32_t)registers[rs1] < (uint32_t)imm_110) {
-          registers[rd] = 1;
-        } else {
-          registers[rd] = 0;
-        }
-
-        // XORI
-      } else if (funct3 == 0b100) {
+      }
+      // SLTI
+      else if (funct3 == 0b010) {
+        registers[rd] = ((int32_t)registers[rs1] < imm_110) ? 1 : 0;
+      }
+      // SLTIU
+      else if (funct3 == 0b011) {
+        registers[rd] = ((uint32_t)registers[rs1] < (uint32_t)imm_110) ? 1 : 0;
+      }
+      // XORI
+      else if (funct3 == 0b100) {
         registers[rd] = registers[rs1] ^ imm_110;
-
-        // ORI
-      } else if (funct3 == 0b110) {
+      }
+      // ORI
+      else if (funct3 == 0b110) {
         registers[rd] = registers[rs1] | imm_110;
-
-        // ANDI
-      } else if (funct3 == 0b111) {
-        registers[rd] = registers[rs1];
-
-      } else if (funct3 == 0b001) {
-        // SLLI
-        if (funct7 == 0b0000000) {
-          registers[rd] = registers[rs1] << imm_110; // maybe extend &0b00011111
+      }
+      // ANDI
+      else if (funct3 == 0b111) {
+        registers[rd] = registers[rs1] & imm_110;
+      }
+      // SLLI
+      else if (funct3 == 0b001 && funct7 == 0b0000000) {
+        registers[rd] = registers[rs1] << (imm_110 & 0x1F);
+      }
+      // SRLI / SRAI
+      else if (funct3 == 0b101) {
+        if (funct7 == 0b0000000) { // SRLI
+          registers[rd] = (uint32_t)registers[rs1] >> (imm_110 & 0x1F);
+        } else if (funct7 == 0b0100000) { // SRAI
+          registers[rd] = (int32_t)registers[rs1] >> (imm_110 & 0x1F);
         } else {
-          fprintf(stderr, "unknown I-type (shift left)\n");
-        }
-      } else if (funct3 == 0b101) {
-        // SRLI
-        if (funct7 == 0b0000000) {
-          registers[rd] =
-              (uint32_t)registers[rs1] >> imm_110; // maybe extend &0b00011111
-        }
-        // SRAI
-        else if (funct7 == 0b0100000) {
-          registers[rd] =
-              (int32_t)registers[rs1] >> imm_110; // maybe extend &0b00011111
-        } else {
-          fprintf(stderr, "unknown I-type (right shift)\n");
+          fprintf(stderr, "ERROR: Unknown I-Type instruction\n");
         }
       } else {
-        fprintf(stderr, "unknown I-type\n");
+        fprintf(stderr, "ERROR: Unknown I-Type instruction\n");
       }
+      // Increment program_count for valid or unknown instructions
+      program_count += 4;
+      insns++;
     }
 
-    // check for S-type
-    else if (opcode == 0b0100011) {
-      // SB
+    else if (opcode == 0b0100011) { // S-Type instructions
+      uint32_t address = registers[rs1] + imm_40;
+
+      // SB: Store Byte
       if (funct3 == 0b000) {
-        memory_wr_b(mem, registers[rs1] + imm_40,
-                    registers[rs2]); //& 0xFF); // Store least significant byte
-        // SH
-      } else if (funct3 == 0b001) {
-        memory_wr_b(
-            mem, registers[rs1] + imm_40,
-            registers[rs2]); //& 0xFFFF); // Store least significant halfword
-        // SW
-      } else if (funct3 == 0b010) {
-        memory_wr_b(mem, registers[rs1] + imm_40,
-                    registers[rs2]); // Store word
-      } else {
-        fprintf(stderr, "unknown S-type\n");
+        memory_wr_b(mem, address, registers[rs2] & 0xFF);
       }
+      // SH: Store Halfword
+      else if (funct3 == 0b001) {
+        memory_wr_h(mem, address, registers[rs2] & 0xFFFF);
+      }
+      // SW: Store Word
+      else if (funct3 == 0b010) {
+        memory_wr_w(mem, address, registers[rs2]);
+      } else {
+        fprintf(stderr, "ERROR: Unknown S-Type instruction (funct3=0x%x)\n",
+                funct3);
+      }
+
+      // Increment program_count to move to the next instruction
+      program_count += 4;
+      insns++;
     }
 
     // check for U-type
@@ -335,6 +294,8 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         registers[rd] = imm_3112 << 12; // Immediate shifted left by 12 bits
       }
       program_count += 4; // Move to the next instruction
+      insns++;
+
       // AUIPC
     } else if (opcode == 0b0010111) {
       if (rd != 0) { // Avoid writing to x0
@@ -342,77 +303,92 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
                         (imm_3112 << 12); // Immediate shifted left by 12 bits
       }
       program_count += 4; // Move to the next instruction
+      insns++;
     }
 
     // check for J-type
     // JAL
     else if (opcode == 0b1101111) {
-      if (rd != 0) {                       // Avoid writing to x0
+      /* if (rd != 0) {                       // Avoid writing to x0
         registers[rd] = program_count + 4; // Store return address
       }
       program_count += imm_3112; // Jump to target address
-      // if not work maybe recalculate the jump target
+      // if not work maybe recalculate the jump target */
+
+      if (rd != 0) {                       // Avoid writing to x0
+        registers[rd] = program_count + 4; // Store return address
+      }
+      // Calculate the jump target
+      int32_t immediate = ((instruction >> 31) & 1) << 20 |    // imm[20]
+                          ((instruction >> 21) & 0x3FF) << 1 | // imm[10:1]
+                          ((instruction >> 20) & 1) << 11 |    // imm[11]
+                          ((instruction >> 12) & 0xFF) << 12;  // imm[19:12]
+      immediate = sign_extend32(immediate, 21); // Sign-extend the immediate
+
+      // Update program counter to target address
+      program_count += immediate;
+      insns++;
+      continue; // Skip the default PC increment
     }
 
     // check for B-type
     else if (opcode == 0b1100011) {
-      sign_extend32(imm_40, 12);
+      int32_t imm_b = (((instruction >> 31) & 1) << 12) |
+                      (((instruction >> 25) & 0x3F) << 5) |
+                      (((instruction >> 8) & 0xF) << 1) |
+                      (((instruction >> 7) & 1) << 11);
 
-      if (funct3 == 0b000) {
-        // BEQ
-        if (registers[rs1] == registers[rs2]) {
-          program_count += imm_40;
-        } else {
+      imm_b = sign_extend32(imm_b, 13);
+
+      if (funct3 == 0b000) { // BEQ
+        if (registers[rs1] == registers[rs2])
+          program_count += imm_b;
+        else
           program_count += 4;
-        }
-      } else if (funct3 == 0b001) {
-        // BNE
-        if (registers[rs1] != registers[rs2]) {
-          program_count += imm_40;
-        } else {
+      } else if (funct3 == 0b001) { // BNE
+        if (registers[rs1] != registers[rs2])
+          program_count += imm_b;
+        else
           program_count += 4;
-        }
-      } else if (funct3 == 0b100) {
-        // BLT
-        if (registers[rs1] < registers[rs2]) {
-          program_count += imm_40;
-        } else {
+      } else if (funct3 == 0b100) { // BLT
+        if ((int32_t)registers[rs1] < (int32_t)registers[rs2])
+          program_count += imm_b;
+        else
           program_count += 4;
-        }
-      } else if (funct3 == 0b101) {
-        // BGE
-        if (registers[rs1] >= registers[rs2]) {
-          program_count += imm_40;
-        } else {
+      } else if (funct3 == 0b101) { // BGE
+        if ((int32_t)registers[rs1] >= (int32_t)registers[rs2])
+          program_count += imm_b;
+        else
           program_count += 4;
-        }
-      } else if (funct3 == 0b110) {
-        // BLTU
-        if (registers[rs1] < registers[rs2]) {
-          program_count += imm_40;
-        } else {
+      } else if (funct3 == 0b110) { // BLTU
+        if ((uint32_t)registers[rs1] < (uint32_t)registers[rs2])
+          program_count += imm_b;
+        else
           program_count += 4;
-        }
-      } else if (funct3 == 0b111) {
-        // BGEU
-        if (registers[rs1] >= registers[rs2]) {
-          program_count += imm_40;
-        } else {
+      } else if (funct3 == 0b111) { // BGEU
+        if ((uint32_t)registers[rs1] >= (uint32_t)registers[rs2])
+          program_count += imm_b;
+        else
           program_count += 4;
-        }
       } else {
         fprintf(stderr, "unknown B-type\n");
+        program_count += 4;
       }
-      program_count += 4;
+      insns++;
+    }
 
-      // system calls
-    } else if (opcode == 0b1110011 && funct3 == 0b000 &&
-               funct12 == 0b000000000000) {
-
+    // system calls
+    else if (opcode == 0b1110011 && funct3 == 0b000 &&
+             funct12 == 0b000000000000) {
       // System call 1: Return getchar() in A0
       if (registers[17] == 1) {
         int input_char = getchar();
-        registers[10]  = input_char;
+        if (input_char == EOF) {
+          // No more input, force exit
+          registers[17] = 93; // a7 = 93 means exit syscall
+        } else {
+          registers[10] = input_char;
+        }
 
         // System call 2: Perform putchar(c), where c is in A0
       } else if (registers[17] == 2) {
@@ -424,9 +400,12 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         break;
       } else {
         fprintf(stderr, "Unknown system call: %u\n", registers[17]);
+        program_count += 4;
+        insns++;
       }
       program_count += 4;
+      insns++;
     }
   }
-  return (struct Stat){.insns = 0};
+  return (struct Stat){.insns = insns};
 }
