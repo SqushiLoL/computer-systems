@@ -1,5 +1,6 @@
 # GCC=gcc -g -Wall -Wextra -pedantic -std=gnu11 
-GCC=gcc -g -Wall -Wextra -pedantic -std=gnu11 -O
+# GCC=gcc -g -Wall -Wextra -pedantic -std=gnu11 -O 
+GCC=gcc -g -Wall -Wextra -pedantic -std=c2x -O
 
 all: sim
 rebuild: clean all

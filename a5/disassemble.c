@@ -1,32 +1,20 @@
 #include "disassemble.h"
+#include "tools.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-uint32_t extractBits(uint32_t value, int end_bit, int start_bit) {
-  if (start_bit > end_bit) {
-    int temp  = start_bit;
-    start_bit = end_bit;
-    end_bit   = temp;
-  }
-  int num_bits = end_bit - start_bit + 1;
-  return (value >> start_bit) & ((1U << num_bits) - 1);
-}
-
-int32_t sign_extend32(int32_t value, int bits) {
-  int shift = 32 - bits;
-  return (value << shift) >> shift;
-}
-
 void disassemble(uint32_t addr, uint32_t instruction, char* result,
                  size_t buf_size, struct symbols* symbols) {
 
   // Suppress unused parameter warning
+  (void)addr;
   (void)symbols;
 
   uint32_t opcode, rd, funct3, rs1, rs2, funct7, funct12;
-  int32_t  imm_110, imm_115, imm_40, imm_3112;
+  int32_t  imm_110, imm_40, imm_3112;
 
   opcode = extractBits(instruction, 6, 0);
   // printf("opcode: %d\n", opcode);
