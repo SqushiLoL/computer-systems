@@ -6,39 +6,31 @@
 #include <stdlib.h>
 #include <string.h>
 
+// sign_extend32 & extractBits in "tools.h"
+
 void disassemble(uint32_t addr, uint32_t instruction, char* result,
                  size_t buf_size, struct symbols* symbols) {
 
-  // Suppress unused parameter warning
-  (void)addr;
-  (void)symbols;
+  (void)addr;    // remove warning
+  (void)symbols; // remove warning
 
   uint32_t opcode, rd, funct3, rs1, rs2, funct7, funct12;
   int32_t  imm_110, imm_40, imm_3112;
 
-  opcode = extractBits(instruction, 6, 0);
-  // printf("opcode: %d\n", opcode);
-  rd = extractBits(instruction, 11, 7);
-  // printf("rd: %d\n", rd);
-  funct3 = extractBits(instruction, 14, 12);
-  // printf("funct3: %d\n", funct3);
-  rs1 = extractBits(instruction, 19, 15);
-  // printf("rs1: %d\n", rs1);
-  rs2 = extractBits(instruction, 24, 20);
-  // printf("rs2: %d\n", rs2);
-  funct7 = extractBits(instruction, 31, 25);
-  // printf("funct7: %d\n", funct7);
+  opcode  = extractBits(instruction, 6, 0);
+  rd      = extractBits(instruction, 11, 7);
+  funct3  = extractBits(instruction, 14, 12);
+  rs1     = extractBits(instruction, 19, 15);
+  rs2     = extractBits(instruction, 24, 20);
+  funct7  = extractBits(instruction, 31, 25);
   funct12 = extractBits(instruction, 31, 20);
 
   // Immediate fields
-  imm_110 = sign_extend32(extractBits(instruction, 31, 20), 12);
-  // printf("imm_110: %d\n", imm_110);
-  imm_40 = sign_extend32((extractBits(instruction, 11, 7) |
+  imm_110  = sign_extend32(extractBits(instruction, 31, 20), 12);
+  imm_40   = sign_extend32((extractBits(instruction, 11, 7) |
                           (extractBits(instruction, 31, 25) << 5)),
-                         12);
-  // printf("imm_40: %d\n", imm_40);
+                           12);
   imm_3112 = sign_extend32(extractBits(instruction, 31, 12), 20);
-  // printf("imm_3112: %d\n", imm_3112);
 
   // check for R-type
   if (opcode == 0b0110011) {
@@ -82,7 +74,7 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
     else if (funct3 == 0b111 && funct7 == 0b0000000) {
       snprintf(result, buf_size, "and x%d, x%d, x%d", rd, rs1, rs2);
     }
-    // RV32M extension (e.g., MUL, DIV)
+    // RV32M extension
     else if (funct7 == 0b0000001) {
       // MUL
       if (funct3 == 0b000) {
@@ -271,7 +263,7 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
       snprintf(result, buf_size, "unknown B-type");
     }
 
-    // ??? - type
+    // system calls
     // ecall
   } else if (opcode == 0b1110011 && funct3 == 0b000 &&
              funct12 == 0b000000000000) {

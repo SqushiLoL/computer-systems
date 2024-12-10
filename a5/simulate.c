@@ -7,16 +7,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+// sign_extend32 & extractBits in "tools.h"
+
 struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
                      struct symbols* symbols) {
+
   (void)symbols;                       // remove warning
   uint32_t registers[32] = {0};        // registers
   uint32_t program_count = start_addr; // Start simulation from entry point
-  uint32_t instruction;
-  uint32_t insns = 0;
+  uint32_t instruction;                // Current instruction
+  uint32_t insns = 0;                  // Number of instructions executed
 
   while (1) {
-    // Fetch instruction
+    // fetch instruction
     instruction = memory_rd_w(mem, program_count);
 
     uint32_t opcode, rd, funct3, rs1, rs2, funct7, funct12;
@@ -35,6 +38,7 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
                              12);
     imm_3112 = sign_extend32(extractBits(instruction, 31, 12), 20);
 
+    // writes each excuted instruction to log file
     if (log_file) {
       fprintf(log_file, "PC: 0x%08x: Instruction:  0x%08x\n", program_count,
               instruction);
@@ -72,7 +76,7 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
       }
       // XOR
       else if (funct3 == 0b100 && funct7 == 0b0000000) {
-        registers[rd] = registers[rs1] ^ registers[rs2]; // turn back to this
+        registers[rd] = registers[rs1] ^ registers[rs2];
       }
       // SRL
       else if (funct3 == 0b101 && funct7 == 0b0000000) {
@@ -90,10 +94,7 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
       // AND
       else if (funct3 == 0b111 && funct7 == 0b0000000) {
         registers[rd] = registers[rs1] & registers[rs2];
-      }
-
-      // RV32M extension (e.g., MUL, DIV)
-      else if (funct7 == 0b0000001) {
+      } else if (funct7 == 0b0000001) {
         // MUL
         if (funct3 == 0b000) {
           registers[rd] = registers[rs1] * registers[rs2];
@@ -117,12 +118,10 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         }
         // DIV
         else if (funct3 == 0b100) {
-          if (registers[rs2] == 0) {
-            // Division by zero
-            registers[rd] = -1; // Quotient for signed division by zero
+          if (registers[rs2] == 0) { // Division by zero
+            registers[rd] = -1;      // Quotient for signed division by zero
           } else if ((int32_t)registers[rs1] == INT32_MIN &&
                      (int32_t)registers[rs2] == -1) {
-            // Signed division overflow
             registers[rd] = registers[rs1]; // Quotient equals the dividend
           } else {
             registers[rd] = (int32_t)registers[rs1] / (int32_t)registers[rs2];
@@ -130,8 +129,7 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         }
         // DIVU
         else if (funct3 == 0b101) {
-          if (registers[rs2] == 0) {
-            // Division by zero
+          if (registers[rs2] == 0) { // Division by zero
             registers[rd] =
                 UINT32_MAX; // Quotient for unsigned division by zero
           } else {
@@ -140,12 +138,10 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         }
         // REM
         else if (funct3 == 0b110) {
-          if (registers[rs2] == 0) {
-            // Division by zero
-            registers[rd] = registers[rs1]; // Remainder equals the dividend
+          if (registers[rs2] == 0) {        // Division by zero
+            registers[rd] = registers[rs1]; // Remainder equals to the dividend
           } else if ((int32_t)registers[rs1] == INT32_MIN &&
                      (int32_t)registers[rs2] == -1) {
-            // Signed division overflow
             registers[rd] = 0; // Remainder is zero
           } else {
             registers[rd] = (int32_t)registers[rs1] % (int32_t)registers[rs2];
@@ -154,8 +150,7 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         // REMU
         else if (funct3 == 0b111) {
           if (registers[rs2] == 0) {
-            // Division by zero
-            registers[rd] = registers[rs1]; // Remainder equals the dividend
+            registers[rd] = registers[rs1]; // Division by zero
           } else {
             registers[rd] = (uint32_t)registers[rs1] % (uint32_t)registers[rs2];
           }
@@ -175,35 +170,34 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
     // check for I-type
     // JALR
     else if (opcode == 0b1100111) {
-      uint32_t target =
-          (registers[rs1] + imm_110) & ~1; // Compute target address, clear LSB
-      if (rd != 0) {                       // Do not write to x0
-        registers[rd] = program_count + 4; // Store return address
+      uint32_t target = (registers[rs1] + imm_110) & ~1;
+      if (rd != 0) {
+        registers[rd] = program_count + 4;
       }
-      program_count = target; // Jump to target
+      program_count = target;
       insns++;
-      continue; // Skip PC increment at the end of the loop
+      continue;
 
-    } else if (opcode == 0b0000011) { // I-Type Load instructions
+    } else if (opcode == 0b0000011) {
       uint32_t address = registers[rs1] + imm_110;
 
-      // LB: Load Byte
+      // LB
       if (funct3 == 0b000) {
         registers[rd] = (int8_t)memory_rd_b(mem, address);
       }
-      // LH: Load Halfword
+      // LH
       else if (funct3 == 0b001) {
         registers[rd] = (int16_t)memory_rd_h(mem, address);
       }
-      // LW: Load Word
+      // LW
       else if (funct3 == 0b010) {
         registers[rd] = memory_rd_w(mem, address);
       }
-      // LBU: Load Byte Unsigned
+      // LBU
       else if (funct3 == 0b100) {
         registers[rd] = (uint8_t)memory_rd_b(mem, address);
       }
-      // LHU: Load Halfword Unsigned
+      // LHU
       else if (funct3 == 0b101) {
         registers[rd] = (uint16_t)memory_rd_h(mem, address);
       } else {
@@ -211,24 +205,30 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
                 "ERROR: Unknown I-Type Load instruction (funct3=0x%x)\n",
                 funct3);
       }
-
-      // Increment program_count to move to the next instruction
       program_count += 4;
       insns++;
     }
 
-    else if (opcode == 0b0010011) { // I-Type instructions
+    else if (opcode == 0b0010011) {
       // ADDI
       if (funct3 == 0b000) {
         registers[rd] = registers[rs1] + imm_110;
       }
       // SLTI
       else if (funct3 == 0b010) {
-        registers[rd] = ((int32_t)registers[rs1] < imm_110) ? 1 : 0;
+        if ((int32_t)registers[rs1] < imm_110) {
+          registers[rd] = 1; // Set rd to 1 if true
+        } else {
+          registers[rd] = 0; // Set rd to 0 otherwise
+        }
       }
       // SLTIU
       else if (funct3 == 0b011) {
-        registers[rd] = ((uint32_t)registers[rs1] < (uint32_t)imm_110) ? 1 : 0;
+        if ((uint32_t)registers[rs1] < (uint32_t)imm_110) {
+          registers[rd] = 1; // Set rd to 1 if true
+        } else {
+          registers[rd] = 0; // Set rd to 0 otherwise
+        }
       }
       // XORI
       else if (funct3 == 0b100) {
@@ -244,37 +244,37 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
       }
       // SLLI
       else if (funct3 == 0b001 && funct7 == 0b0000000) {
-        registers[rd] = registers[rs1] << (imm_110 & 0x1F);
+        registers[rd] = registers[rs1] << (imm_110 & 00011111);
       }
-      // SRLI / SRAI
-      else if (funct3 == 0b101) {
-        if (funct7 == 0b0000000) { // SRLI
-          registers[rd] = (uint32_t)registers[rs1] >> (imm_110 & 0x1F);
-        } else if (funct7 == 0b0100000) { // SRAI
-          registers[rd] = (int32_t)registers[rs1] >> (imm_110 & 0x1F);
-        } else {
-          fprintf(stderr, "ERROR: Unknown I-Type instruction\n");
-        }
+      // SRLI
+      else if (funct3 == 0b101 && funct7 == 0b0000000) {
+        registers[rd] = (uint32_t)registers[rs1] >> (imm_110 & 00011111);
+      }
+      // SRAI
+      else if (funct3 == 0b101 && funct7 == 0b0100000) {
+        registers[rd] = (int32_t)registers[rs1] >> (imm_110 & 00011111);
+
       } else {
         fprintf(stderr, "ERROR: Unknown I-Type instruction\n");
       }
-      // Increment program_count for valid or unknown instructions
+
       program_count += 4;
       insns++;
     }
 
-    else if (opcode == 0b0100011) { // S-Type instructions
+    // S-Type
+    else if (opcode == 0b0100011) {
       uint32_t address = registers[rs1] + imm_40;
 
-      // SB: Store Byte
+      // SB
       if (funct3 == 0b000) {
         memory_wr_b(mem, address, registers[rs2] & 0xFF);
       }
-      // SH: Store Halfword
+      // SH
       else if (funct3 == 0b001) {
         memory_wr_h(mem, address, registers[rs2] & 0xFFFF);
       }
-      // SW: Store Word
+      // SW
       else if (funct3 == 0b010) {
         memory_wr_w(mem, address, registers[rs2]);
       } else {
@@ -282,7 +282,6 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
                 funct3);
       }
 
-      // Increment program_count to move to the next instruction
       program_count += 4;
       insns++;
     }
@@ -290,10 +289,10 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
     // check for U-type
     // LUI
     else if (opcode == 0b0110111) {
-      if (rd != 0) {                    // Avoid writing to x0
-        registers[rd] = imm_3112 << 12; // Immediate shifted left by 12 bits
+      if (rd != 0) {
+        registers[rd] = imm_3112 << 12;
       }
-      program_count += 4; // Move to the next instruction
+      program_count += 4;
       insns++;
 
       // AUIPC
@@ -340,32 +339,38 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
 
       imm_b = sign_extend32(imm_b, 13);
 
-      if (funct3 == 0b000) { // BEQ
+      // BEQ
+      if (funct3 == 0b000) {
         if (registers[rs1] == registers[rs2])
           program_count += imm_b;
         else
           program_count += 4;
-      } else if (funct3 == 0b001) { // BNE
+        // BNE
+      } else if (funct3 == 0b001) {
         if (registers[rs1] != registers[rs2])
           program_count += imm_b;
         else
           program_count += 4;
-      } else if (funct3 == 0b100) { // BLT
+        // BLT
+      } else if (funct3 == 0b100) {
         if ((int32_t)registers[rs1] < (int32_t)registers[rs2])
           program_count += imm_b;
         else
           program_count += 4;
-      } else if (funct3 == 0b101) { // BGE
+        // BGE
+      } else if (funct3 == 0b101) {
         if ((int32_t)registers[rs1] >= (int32_t)registers[rs2])
           program_count += imm_b;
         else
           program_count += 4;
-      } else if (funct3 == 0b110) { // BLTU
+        // BLTU
+      } else if (funct3 == 0b110) {
         if ((uint32_t)registers[rs1] < (uint32_t)registers[rs2])
           program_count += imm_b;
         else
           program_count += 4;
-      } else if (funct3 == 0b111) { // BGEU
+        // BGEU
+      } else if (funct3 == 0b111) {
         if ((uint32_t)registers[rs1] >= (uint32_t)registers[rs2])
           program_count += imm_b;
         else
@@ -380,22 +385,23 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
     // system calls
     else if (opcode == 0b1110011 && funct3 == 0b000 &&
              funct12 == 0b000000000000) {
-      // System call 1: Return getchar() in A0
+
+      // Call 1: Return getchar() in A0
       if (registers[17] == 1) {
         int input_char = getchar();
+
         if (input_char == EOF) {
-          // No more input, force exit
-          registers[17] = 93; // a7 = 93 means exit syscall
+          registers[17] = 93; // 93 == exit
         } else {
           registers[10] = input_char;
         }
 
-        // System call 2: Perform putchar(c), where c is in A0
+        // Call 2: Perform putchar(c), where c is in A0
       } else if (registers[17] == 2) {
         putchar((char)registers[10]);
-        fflush(stdout); // Ensure immediate output
+        fflush(stdout); // flushes the output buffer of the stream
 
-        // System call 3 or 93: Exit the simulation
+        // Call 3 or 93: Exit the simulation
       } else if (registers[17] == 3 || registers[17] == 93) {
         break;
       } else {
@@ -407,5 +413,6 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
       insns++;
     }
   }
+  // return number of instructions executed
   return (struct Stat){.insns = insns};
 }
