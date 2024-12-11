@@ -15,7 +15,7 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
   (void)symbols; // remove warning
 
   uint32_t opcode, rd, funct3, rs1, rs2, funct7, funct12;
-  int32_t  imm_110, imm_40, imm_3112;
+  int32_t  i_imm, s_imm, u_imm, jal_imm, b_imm;
 
   opcode  = extractBits(instruction, 6, 0);
   rd      = extractBits(instruction, 11, 7);
@@ -26,11 +26,27 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
   funct12 = extractBits(instruction, 31, 20);
 
   // Immediate fields
-  imm_110  = sign_extend32(extractBits(instruction, 31, 20), 12);
-  imm_40   = sign_extend32((extractBits(instruction, 11, 7) |
-                          (extractBits(instruction, 31, 25) << 5)),
-                           12);
-  imm_3112 = sign_extend32(extractBits(instruction, 31, 12), 20);
+  i_imm = extractBits(instruction, 31, 20);
+  i_imm = sign_extend32(i_imm, 12);
+
+  s_imm = (extractBits(instruction, 11, 7) |
+           (extractBits(instruction, 31, 25) << 5));
+  s_imm = sign_extend32(s_imm, 12);
+
+  u_imm = extractBits(instruction, 31, 12);
+  u_imm = sign_extend32(u_imm, 20);
+
+  jal_imm = (extractBits(instruction, 19, 12) << 12) |
+            (extractBits(instruction, 20, 20) << 11) |
+            (extractBits(instruction, 30, 21) << 1) |
+            (extractBits(instruction, 31, 31) << 20);
+  jal_imm = sign_extend32(jal_imm, 21);
+
+  b_imm = (extractBits(instruction, 31, 31) << 12) |
+          (extractBits(instruction, 7, 7) << 11) |
+          (extractBits(instruction, 30, 25) << 5) |
+          (extractBits(instruction, 11, 8) << 1);
+  b_imm = sign_extend32(b_imm, 13);
 
   // check for R-type
   if (opcode == 0b0110011) {
@@ -117,92 +133,69 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
     }
   }
 
-  else if (opcode == 0b1100011) {
-    sign_extend32(imm_40, 12);
-    if (funct3 == 0b000) {
-      // BEQ
-      snprintf(result, buf_size, "beq x%d, x%d, %d", rs1, rs2, imm_40);
-    } else if (funct3 == 0b001) {
-      // BNE
-      snprintf(result, buf_size, "bne x%d, x%d, %d", rs1, rs2, imm_40);
-    } else if (funct3 == 0b100) {
-      // BLT
-      snprintf(result, buf_size, "blt x%d, x%d, %d", rs1, rs2, imm_40);
-    } else if (funct3 == 0b101) {
-      // BGE
-      snprintf(result, buf_size, "bge x%d, x%d, %d", rs1, rs2, imm_40);
-    } else if (funct3 == 0b110) {
-      // BLTU
-      snprintf(result, buf_size, "bltu x%d, x%d, %d", rs1, rs2, imm_40);
-    } else if (funct3 == 0b111) {
-      // BGEU
-      snprintf(result, buf_size, "bgeu x%d, x%d, %d", rs1, rs2, imm_40);
-    } else {
-      snprintf(result, buf_size, "unknown extension R-type");
-    }
-  }
-
   // check for I-type
   // JALR
   else if (opcode == 0b1100111) {
-    snprintf(result, buf_size, "jalr x%d, %d(x%d)", rd, imm_110, rs1);
+    snprintf(result, buf_size, "jalr x%d, %d(x%d)", rd, i_imm, rs1);
   } else if (opcode == 0b0000011) {
     // LB
     if (funct3 == 0b000) {
-      snprintf(result, buf_size, "lb x%d, %d(x%d)", rd, imm_110, rs1);
+      snprintf(result, buf_size, "lb x%d, %d(x%d)", rd, i_imm, rs1);
       // LH
     } else if (funct3 == 0b001) {
-      snprintf(result, buf_size, "lh x%d, %d(x%d)", rd, imm_110, rs1);
+      snprintf(result, buf_size, "lh x%d, %d(x%d)", rd, i_imm, rs1);
       // LW
     } else if (funct3 == 0b010) {
-      snprintf(result, buf_size, "lw x%d, %d(x%d)", rd, imm_110, rs1);
+      snprintf(result, buf_size, "lw x%d, %d(x%d)", rd, i_imm, rs1);
       // LBU
     } else if (funct3 == 0b100) {
-      snprintf(result, buf_size, "lbu x%d, %d(x%d)", rd, imm_110, rs1);
+      snprintf(result, buf_size, "lbu x%d, %d(x%d)", rd, i_imm, rs1);
       // LHU
     } else if (funct3 == 0b101) {
-      snprintf(result, buf_size, "lhu x%d, %d(x%d)", rd, imm_110, rs1);
+      snprintf(result, buf_size, "lhu x%d, %d(x%d)", rd, i_imm, rs1);
     } else {
       snprintf(result, buf_size, "unknown I-type (load)");
     }
   } else if (opcode == 0b0010011) {
     // ADDI
     if (funct3 == 0b000) {
-      snprintf(result, buf_size, "addi x%d, x%d, %d", rd, rs1, imm_110);
+      snprintf(result, buf_size, "addi x%d, x%d, %d", rd, rs1, i_imm);
       // SLTI
     } else if (funct3 == 0b010) {
-      snprintf(result, buf_size, "slti x%d, x%d, %d", rd, rs1, imm_110);
+      snprintf(result, buf_size, "slti x%d, x%d, %d", rd, rs1, i_imm);
       // SLTIU
     } else if (funct3 == 0b011) {
-      snprintf(result, buf_size, "sltiu x%d, x%d, %d", rd, rs1, imm_110);
+      snprintf(result, buf_size, "sltiu x%d, x%d, %d", rd, rs1, i_imm);
       // XORI
     } else if (funct3 == 0b100) {
-      snprintf(result, buf_size, "xori x%d, x%d, %d", rd, rs1, imm_110);
+      snprintf(result, buf_size, "xori x%d, x%d, %d", rd, rs1, i_imm);
       // ORI
     } else if (funct3 == 0b110) {
-      snprintf(result, buf_size, "ori x%d, x%d, %d", rd, rs1, imm_110);
+      snprintf(result, buf_size, "ori x%d, x%d, %d", rd, rs1, i_imm);
       // ANDI
     } else if (funct3 == 0b111) {
-      snprintf(result, buf_size, "andi x%d, x%d, %d", rd, rs1, imm_110);
+      snprintf(result, buf_size, "andi x%d, x%d, %d", rd, rs1, i_imm);
     } else if (funct3 == 0b001) {
       // SLLI
       if (funct7 == 0b0000000) {
-        snprintf(result, buf_size, "slli x%d, x%d, %d", rd, rs1, imm_110);
+        uint32_t shamt = extractBits(instruction, 24, 20);
+        snprintf(result, buf_size, "slli x%d, x%d, %u", rd, rs1, shamt);
       } else {
         snprintf(result, buf_size, "unknown I-type (shift left)");
       }
     } else if (funct3 == 0b101) {
       // SRLI
       if (funct7 == 0b0000000) {
-        snprintf(result, buf_size, "srli x%d, x%d, %d", rd, rs1, imm_110);
+        uint32_t shamt = extractBits(instruction, 24, 20);
+        snprintf(result, buf_size, "srli x%d, x%d, %d", rd, rs1, shamt);
       }
       // SRAI
       else if (funct7 == 0b0100000) {
-        snprintf(result, buf_size, "srai x%d, x%d, %d", rd, rs1, imm_110);
+        uint32_t shamt = extractBits(instruction, 24, 20);
+        snprintf(result, buf_size, "srai x%d, x%d, %d", rd, rs1, shamt);
       } else {
         snprintf(result, buf_size, "unknown I-type (right shift)");
       }
-
     } else {
       snprintf(result, buf_size, "unknown I-type ");
     }
@@ -212,13 +205,13 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
   else if (opcode == 0b0100011) {
     // SB
     if (funct3 == 0b000) {
-      snprintf(result, buf_size, "sb x%d, %d(x%d)", rs2, imm_40, rs1);
+      snprintf(result, buf_size, "sb x%d, %d(x%d)", rs2, s_imm, rs1);
       // SH
     } else if (funct3 == 0b001) {
-      snprintf(result, buf_size, "sh x%d, %d(x%d)", rs2, imm_40, rs1);
+      snprintf(result, buf_size, "sh x%d, %d(x%d)", rs2, s_imm, rs1);
       // SW
     } else if (funct3 == 0b010) {
-      snprintf(result, buf_size, "sw x%d, %d(x%d)", rs2, imm_40, rs1);
+      snprintf(result, buf_size, "sw x%d, %d(x%d)", rs2, s_imm, rs1);
     } else {
       snprintf(result, buf_size, "unknown S-type");
     }
@@ -227,38 +220,40 @@ void disassemble(uint32_t addr, uint32_t instruction, char* result,
   // check for U-type
   // LUI
   else if (opcode == 0b0110111) {
-    snprintf(result, buf_size, "lui x%d, %d", rd, imm_3112);
+    snprintf(result, buf_size, "lui x%d, %d", rd, u_imm);
     // AUIPC
   } else if (opcode == 0b0010111) {
-    snprintf(result, buf_size, "auipc x%d, %d", rd, imm_3112);
+    snprintf(result, buf_size, "auipc x%d, %d", rd, u_imm);
   }
 
   // check for J-type
   // JAL
   else if (opcode == 0b1101111) {
-    snprintf(result, buf_size, "jal x%d, %d", rd, imm_3112);
+    uint32_t target = addr + jal_imm;
+    snprintf(result, buf_size, "jal x%d, %x", rd, target);
   }
 
   // check for B-type
   else if (opcode == 0b1100011) {
+    uint32_t branch_tar = addr + b_imm;
     if (funct3 == 0b000) {
       // BEQ
-      snprintf(result, buf_size, "beq x%d, x%d, %d", rs1, rs2, imm_40);
+      snprintf(result, buf_size, "beq x%d, x%d, %x", rs1, rs2, branch_tar);
     } else if (funct3 == 0b001) {
       // BNE
-      snprintf(result, buf_size, "bne x%d, x%d, %d", rs1, rs2, imm_40);
+      snprintf(result, buf_size, "bne x%d, x%d, %x", rs1, rs2, branch_tar);
     } else if (funct3 == 0b100) {
       // BLT
-      snprintf(result, buf_size, "blt x%d, x%d, %d", rs1, rs2, imm_40);
+      snprintf(result, buf_size, "blt x%d, x%d, %x", rs1, rs2, branch_tar);
     } else if (funct3 == 0b101) {
       // BGE
-      snprintf(result, buf_size, "bge x%d, x%d, %d", rs1, rs2, imm_40);
+      snprintf(result, buf_size, "bge x%d, x%d, %x", rs1, rs2, branch_tar);
     } else if (funct3 == 0b110) {
       // BLTU
-      snprintf(result, buf_size, "bltu x%d, x%d, %d", rs1, rs2, imm_40);
+      snprintf(result, buf_size, "bltu x%d, x%d, %x", rs1, rs2, branch_tar);
     } else if (funct3 == 0b111) {
       // BGEU
-      snprintf(result, buf_size, "bgeu x%d, x%d, %d", rs1, rs2, imm_40);
+      snprintf(result, buf_size, "bgeu x%d, x%d, %x", rs1, rs2, branch_tar);
     } else {
       snprintf(result, buf_size, "unknown B-type");
     }
