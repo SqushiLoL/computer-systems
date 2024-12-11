@@ -257,7 +257,6 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
       } else {
         fprintf(stderr, "ERROR: Unknown I-Type instruction\n");
       }
-
       program_count += 4;
       insns++;
     }
@@ -281,7 +280,6 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
         fprintf(stderr, "ERROR: Unknown S-Type instruction (funct3=0x%x)\n",
                 funct3);
       }
-
       program_count += 4;
       insns++;
     }
@@ -308,35 +306,27 @@ struct Stat simulate(struct memory* mem, int start_addr, FILE* log_file,
     // check for J-type
     // JAL
     else if (opcode == 0b1101111) {
-      /* if (rd != 0) {                       // Avoid writing to x0
-        registers[rd] = program_count + 4; // Store return address
+      if (rd != 0) {
+        registers[rd] = program_count + 4;
       }
-      program_count += imm_3112; // Jump to target address
-      // if not work maybe recalculate the jump target */
+      int32_t immediate =
+          ((instruction >> 31) & 1) << 20 |             // imm[20]
+          ((instruction >> 21) & 0b001111111111) << 1 | // imm[10:1]
+          ((instruction >> 20) & 1) << 11 |             // imm[11]
+          ((instruction >> 12) & 0b11111111) << 12;     // imm[19:12]
+      immediate = sign_extend32(immediate, 21);
 
-      if (rd != 0) {                       // Avoid writing to x0
-        registers[rd] = program_count + 4; // Store return address
-      }
-      // Calculate the jump target
-      int32_t immediate = ((instruction >> 31) & 1) << 20 |    // imm[20]
-                          ((instruction >> 21) & 0x3FF) << 1 | // imm[10:1]
-                          ((instruction >> 20) & 1) << 11 |    // imm[11]
-                          ((instruction >> 12) & 0xFF) << 12;  // imm[19:12]
-      immediate = sign_extend32(immediate, 21); // Sign-extend the immediate
-
-      // Update program counter to target address
       program_count += immediate;
       insns++;
-      continue; // Skip the default PC increment
+      continue;
     }
 
     // check for B-type
     else if (opcode == 0b1100011) {
       int32_t imm_b = (((instruction >> 31) & 1) << 12) |
-                      (((instruction >> 25) & 0x3F) << 5) |
-                      (((instruction >> 8) & 0xF) << 1) |
+                      (((instruction >> 25) & 0b00111111) << 5) |
+                      (((instruction >> 8) & 0b1111) << 1) |
                       (((instruction >> 7) & 1) << 11);
-
       imm_b = sign_extend32(imm_b, 13);
 
       // BEQ
